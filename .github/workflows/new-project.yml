@@ -11,19 +11,19 @@ on:
           - spring-boot
           - nextjs
       repo_name:
-        description: 'Nome do repositório (ex: admin-portal)'
+        description: 'Nome do repositório'
         required: true
       group_id:
-        description: 'Package/groupId (ex: com.acmesoftware.admin)'
+        description: 'Package/groupId'
         required: true
-        default: 'com.acmesoftware'
+        default: 'com.gimpellabs'
       artifact_id:
-        description: 'Nome do artefato (ex: admin-portal)'
+        description: 'Nome do artefato'
         required: true
       description:
-        description: 'Descrição do projeto'
+        description: 'Descrição'
         required: false
-        default: 'Novo projeto gerado automaticamente'
+        default: 'Novo projeto'
       is_private:
         description: 'Privado?'
         type: boolean
@@ -33,101 +33,62 @@ jobs:
   factory:
     runs-on: self-hosted
     steps:
-      # 1. Determina qual template usar
       - name: Mapear template
         id: template
         run: |
-          if [ "${{ inputs.template_name }}" = "spring-boot" ]; then
-            echo "template_repo=template-spring-boot" >> $GITHUB_OUTPUT
-          elif [ "${{ inputs.template_name }}" = "nextjs" ]; then
-            echo "template_repo=template-nextjs" >> $GITHUB_OUTPUT
-          else
-            echo "Template inválido: ${{ inputs.template_name }}"
-            exit 1
-          fi
+          case "${{ inputs.template_name }}" in
+            "spring-boot") echo "template_repo=template-spring-boot" >> $GITHUB_OUTPUT ;;
+            "nextjs") echo "template_repo=template-nextjs" >> $GITHUB_OUTPUT ;;
+            *) echo "Template inválido"; exit 1 ;;
+          esac
 
-      # 2. Criar repo via API GitHub
-      - name: Gerar repositório do template
+      - name: Criar repositório
         run: |
-          RESPONSE=$(curl -s -w "\n%{http_code}" \
+          curl -s -w "\nHTTP:%{http_code}" \
             -X POST \
             -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
             -H "Accept: application/vnd.github.baptiste-preview+json" \
-            "https://api.github.com/repos/acme-software/${{ steps.template.outputs.template_repo }}/generate" \
+            "https://api.github.com/repos/Gimpel-Labs/${{ steps.template.outputs.template_repo }}/generate" \
             -d "{
-              \"owner\": \"acme-software\",
+              \"owner\": \"Gimpel-Labs\",
               \"name\": \"${{ inputs.repo_name }}\",
               \"description\": \"${{ inputs.description }}\",
-              \"private\": ${{ inputs.is_private }},
-              \"include_all_branches\": false
-            }")
+              \"private\": ${{ inputs.is_private }}
+            }" > response.txt
 
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-
-          echo "HTTP: $HTTP_CODE"
-          echo "$BODY"
-
-          if [ "$HTTP_CODE" != "201" ]; then
-            echo "❌ Falha ao criar repositório"
+          HTTP_CODE=$(tail -1 response.txt)
+          if [ "$HTTP_CODE" != "HTTP:201" ]; then
+            echo "❌ Erro HTTP $HTTP_CODE"
+            cat response.txt
             exit 1
           fi
+          echo "✅ Repositório criado!"
 
-      # 3. Aguardar GitHub processar
-      - name: Wait for repo availability
+      - name: Aguardar disponibilidade
         run: sleep 10
 
-      # 4. Clonar e personalizar
       - name: Personalizar projeto
         run: |
           git clone \
-            "https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/acme-software/${{ inputs.repo_name }}.git" \
+            "https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/Gimpel-Labs/${{ inputs.repo_name }}.git" \
             "/tmp/${{ inputs.repo_name }}"
-          
           cd "/tmp/${{ inputs.repo_name }}"
 
-          # Personalização por template
+          GROUP_ID="${{ inputs.group_id }}"
+          ARTIFACT_ID="${{ inputs.artifact_id }}"
+
           if [ "${{ inputs.template_name }}" = "spring-boot" ]; then
-            sed -i "s|<groupId>.*</groupId>|<groupId>${{ inputs.group_id }}</groupId>|g" pom.xml
-            sed -i "s|<artifactId>.*</artifactId>|<artifactId>${{ inputs.artifact_id }}</artifactId>|g" pom.xml
-            sed -i "s|<name>.*</name>|<name>${{ inputs.artifact_id }}</name>|g" pom.xml
-            
-            # Renomeia pacotes Java
-            find src -name "*.java" -exec sed -i "s/com\.acmesoftware\./${{ inputs.group_id.replace('.', '\\.') }}./g" {} \;
-            
-          elif [ "${{ inputs.template_name }}" = "nextjs" ]; then
-            sed -i "s|\"name\": \".*\"|\"name\": \"${{ inputs.artifact_id }}\",|g" package.json
-            
-            # Atualiza path alias se necessário
-            sed -i "s|@acmesoftware|@${{ inputs.group_id.replace('.', '-') }}|g" tsconfig.json
-            
-            # Cria pasta lib com nome customizado
-            mkdir -p src/lib/${{ inputs.artifact_id }}
-            echo "// Custom utils for ${{ inputs.artifact_id }}" > src/lib/${{ inputs.artifact_id }}/index.ts
+            sed -i "s|<groupId>.*</groupId>|<groupId>$GROUP_ID</groupId>|g" pom.xml
+            sed -i "s|<artifactId>.*</artifactId>|<artifactId>$ARTIFACT_ID</artifactId>|g" pom.xml
+            sed -i "s|<name>.*</name>|<name>$ARTIFACT_ID</name>|g" pom.xml
+            echo "✅ Spring Boot personalizada"
           fi
 
-          # Commit das personalizações
-          git config user.email "factory-bot@acmesoftware.com"
-          git config user.name "Project Factory Bot"
-          git add .
-          
-          if git diff --staged --quiet; then
-            echo "Nenhuma mudança para commit"
-          else
-            git commit -m "chore: personaliza ${{ inputs.template_name }} para ${{ inputs.artifact_id }} (groupId: ${{ inputs.group_id }})"
-            git push
+          if [ "${{ inputs.template_name }}" = "nextjs" ]; then
+            sed -i "s|\"name\": \".*\"|\"name\": \"$ARTIFACT_ID\",|g" package.json
+            mkdir -p src/lib/$ARTIFACT_ID
+            echo "// Utils para $ARTIFACT_ID" > "src/lib/$ARTIFACT_ID/index.ts"
+            echo "✅ Next.js personalizada"
           fi
 
-      # 5. Resumo bonito
-      - name: Success Summary
-        run: |
-          echo "## ✅ Projeto criado com sucesso!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
-          echo "|:---|:---|" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔗 Repositório | [acme-software/${{ inputs.repo_name }}](https://github.com/acme-software/${{ inputs.repo_name }}) |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🏗️ Template | ${{ inputs.template_name }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📦 groupId/Name | \`${{ inputs.group_id }}.${{ inputs.artifact_id }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔒 Privado | ${{ inputs.is_private }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Pronto para codar!** 🚀" >> $GITHUB_STEP_SUMMARY
+          git config user.email "factory@
