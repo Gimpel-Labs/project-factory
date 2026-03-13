@@ -28,9 +28,9 @@ jobs:
           github-token: ${{ secrets.GH_TOKEN }}
           script: |
             const templateRepo = `template-${{ github.event.inputs.template-repo }}`;
-            const owner = context.repo.owner;
+            const orgName = 'Gimpel-Labs';
             const response = await github.request('POST /repos/{owner}/{repo}/generate', {
-              owner: owner,
+              owner: orgName,
               repo: templateRepo,
               name: '${{ github.event.inputs.repo-name }}',
               private: ${{ github.event.inputs.private }},
