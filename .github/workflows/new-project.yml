@@ -1,47 +1,42 @@
-name: 🚀 Project Factory
-
-on:
-  workflow_dispatch:
-    inputs:
-      template:
-        description: 'Template exato'
-        required: true
-      repo:
-        required: true
-      private:
-        type: boolean
-        default: true
-
+name: Diagnóstico Runner
+on: [workflow_dispatch]
 jobs:
-  factory:
-    runs-on: [self-hosted, proxmox]  # ← SUAS LABELS
+  diag:
+    runs-on: self-hosted
     steps:
-      - name: Debug
+      - name: 1.Básico
         run: |
-          echo "Runner: $(uname -a)"
-          echo "User: $(whoami)"
-          echo "Disk: $(df -h | head -3)"
-          
-      - name: Listar templates
+          echo "::group::Sistema"
+          whoami; hostname; pwd; date; uname -a
+          echo "::endgroup::"
+      - name: 2.Recursos
         run: |
-          curl -s -H "Authorization: token $GH_TOKEN" \
-            https://api.github.com/orgs/Gimpel-Labs/repos?per_page=20 \
-            | grep -E "${{ inputs.template }}" \
-            | grep name || echo "Template não encontrado"
-
-      - name: Criar projeto
+          echo "::group::Recursos"
+          free -h; df -h /; ps aux | wc -l
+          echo "::endgroup::"
+      - name: 3.Network
         run: |
-          RESPONSE=$(curl -s -w "\nCODE:%{http_code}" \
-            -X POST \
-            -H "Authorization: token $GH_TOKEN" \
-            -H "Accept: application/vnd.github.baptiste-preview+json" \
-            "https://api.github.com/repos/Gimpel-Labs/${{ inputs.template }}/generate" \
-            -d "{\"owner\":\"Gimpel-Labs\",\"name\":\"${{ inputs.repo }}\",\"description\":\"Factory\",\"private\":${{ inputs.private }}}")
-          
-          echo "$RESPONSE"
-          if ! echo "$RESPONSE" | grep -q "CODE:201"; then
-            exit 1
-          fi
-
-      - name: Sucesso
-        run: echo "✅ ${{ inputs.repo }} criado!"
+          echo "::group::Network"
+          ping -c3 8.8.8.8
+          curl -I https://github.com
+          echo "::endgroup::"
+      - name: 4.Deps
+        run: |
+          echo "::group::Dependências"
+          which java node git curl jq || echo "FALTANDO"
+          java -version 2>&1 || echo "NO JAVA"
+          node -version 2>&1 || echo "NO NODE"
+          echo "::endgroup::"
+      - name: 5.GH_TOKEN
+        run: |
+          echo "::group::Token"
+          curl -s -H "Authorization: token $GH_TOKEN" https://api.github.com/user | jq .login
+          echo "::endgroup::"
+      - name: 6.Workspace
+        run: |
+          echo "::group::Workspace"
+          ls -la _work/ || mkdir -p _work
+          df -h _work/
+          echo "::endgroup::"
+      - name: 7.Success
+        run: echo "✅ Diagnóstico completo"
