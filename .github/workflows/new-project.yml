@@ -1,17 +1,14 @@
-name: Force Steps
-on: [workflow_dispatch]
+name: Test Runner
+
+on:
+  workflow_dispatch:
+
 jobs:
-  force:
+  test:
     runs-on: [self-hosted, proxmox]
-    defaults:
-      run:
-        shell: bash
     steps:
-      - id: zero
-        run: echo "::notice::STEP0 $(date)"
-      - id: one
-        run: echo "::warning::STEP1 whoami = $(whoami)"
-      - id: two
-        run: echo "::error::STEP2 hostname = $(hostname)"
-      - id: three
-        run: ls -la /home/github/actions-runner/
+      - name: Whoami
+        run: |
+          echo "User: $(whoami)"
+          echo "Host: $(hostname)"
+          pwd
