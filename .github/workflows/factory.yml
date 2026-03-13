@@ -23,10 +23,9 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Generate Repo from Template
-        env:
-          PAT: ${{ secrets.GH_TOKEN }}
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GH_TOKEN }}
           script: |
             const templateRepo = `template-${{ github.event.inputs.template-repo }}`;
             const owner = context.repo.owner;
@@ -36,10 +35,6 @@ jobs:
               name: '${{ github.event.inputs.repo-name }}',
               private: ${{ github.event.inputs.private }},
               include_all_branches: false
-            }, {
-              headers: {
-                authorization: `token ${process.env.PAT}`
-              }
             });
             console.log(`New repository: ${response.data.full_name}`);
       - name: Log URL
