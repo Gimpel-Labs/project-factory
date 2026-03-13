@@ -4,91 +4,83 @@ on:
   workflow_dispatch:
     inputs:
       template_name:
-        description: 'Template a usar'
+        description: 'Template'
         required: true
         type: choice
         options:
           - spring-boot
           - nextjs
       repo_name:
-        description: 'Nome do repositório'
+        description: 'Nome do repo'
         required: true
+        default: 'example'
       group_id:
-        description: 'Package/groupId'
+        description: 'GroupId'
         required: true
-        default: 'com.gimpellabs'
-      artifact_id:
-        description: 'Nome do artefato'
-        required: true
+        default: 'com.gimpel'
       description:
         description: 'Descrição'
-        required: false
-        default: 'Novo projeto'
-      is_private:
-        description: 'Privado?'
-        type: boolean
-        default: true
+        default: 'Project created through Factory'
 
 jobs:
-  factory:
+  create:
     runs-on: self-hosted
     steps:
-      - name: Mapear template
-        id: template
+      - name: Definir template repo
+        id: vars
         run: |
-          case "${{ inputs.template_name }}" in
-            "spring-boot") echo "template_repo=template-spring-boot" >> $GITHUB_OUTPUT ;;
-            "nextjs") echo "template_repo=template-nextjs" >> $GITHUB_OUTPUT ;;
-            *) echo "Template inválido"; exit 1 ;;
-          esac
+          if [ "${{ inputs.template_name }}" = "spring-boot" ]; then
+            echo "template_repo=template-spring-boot" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.template_name }}" = "nextjs" ]; then
+            echo "template_repo=template-nextjs" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Listar templates disponíveis
+        run: |
+          echo "Templates da org:"
+          curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            https://api.github.com/orgs/Gimpel-Labs/repos?per_page=10 | jq '.[].name'
 
       - name: Criar repositório
         run: |
-          curl -s -w "\nHTTP:%{http_code}" \
+          curl -s -w "HTTP:%{http_code}" \
             -X POST \
             -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
             -H "Accept: application/vnd.github.baptiste-preview+json" \
-            "https://api.github.com/repos/Gimpel-Labs/${{ steps.template.outputs.template_repo }}/generate" \
-            -d "{
-              \"owner\": \"Gimpel-Labs\",
-              \"name\": \"${{ inputs.repo_name }}\",
-              \"description\": \"${{ inputs.description }}\",
-              \"private\": ${{ inputs.is_private }}
-            }" > response.txt
+            "https://api.github.com/repos/Gimpel-Labs/${{ steps.vars.outputs.template_repo }}/generate" \
+            -d "{\"owner\":\"Gimpel-Labs\",\"name\":\"${{ inputs.repo_name }}\",\"description\":\"${{ inputs.description }}\",\"private\":true}" > response.json
 
-          HTTP_CODE=$(tail -1 response.txt)
-          if [ "$HTTP_CODE" != "HTTP:201" ]; then
-            echo "❌ Erro HTTP $HTTP_CODE"
-            cat response.txt
+          HTTP_CODE=$(grep -o 'HTTP:[0-9]*' response.json | cut -d: -f2)
+          
+          if [ "$HTTP_CODE" = "201" ]; then
+            echo "✅ Repo criado: ${{ inputs.repo_name }}"
+          else
+            echo "❌ Erro $HTTP_CODE"
+            cat response.json
             exit 1
           fi
-          echo "✅ Repositório criado!"
 
-      - name: Aguardar disponibilidade
-        run: sleep 10
-
-      - name: Personalizar projeto
+      - name: Personalizar
         run: |
-          git clone \
-            "https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/Gimpel-Labs/${{ inputs.repo_name }}.git" \
-            "/tmp/${{ inputs.repo_name }}"
-          cd "/tmp/${{ inputs.repo_name }}"
-
-          GROUP_ID="${{ inputs.group_id }}"
-          ARTIFACT_ID="${{ inputs.artifact_id }}"
-
-          if [ "${{ inputs.template_name }}" = "spring-boot" ]; then
-            sed -i "s|<groupId>.*</groupId>|<groupId>$GROUP_ID</groupId>|g" pom.xml
-            sed -i "s|<artifactId>.*</artifactId>|<artifactId>$ARTIFACT_ID</artifactId>|g" pom.xml
-            sed -i "s|<name>.*</name>|<name>$ARTIFACT_ID</name>|g" pom.xml
-            echo "✅ Spring Boot personalizada"
+          sleep 5
+          git clone "https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/Gimpel-Labs/${{ inputs.repo_name }}.git" /tmp/repo
+          cd /tmp/repo
+          
+          GROUP="${{ inputs.group_id }}"
+          NAME="${{ inputs.artifact_id || inputs.repo_name }}"
+          
+          if [ "${{ inputs.template_name }}" = "springboot" ]; then
+            sed -i "s|<groupId>.*</groupId>|<groupId>$GROUP</groupId>|g" pom.xml || true
+            sed -i "s|<artifactId>.*</artifactId>|<artifactId>$NAME</artifactId>|g" pom.xml || true
           fi
+          
+          git config user.email gustavo.gimpel@gmail.com
+          git config user.name Factory
+          git add . || true
+          git commit -m "factory: $NAME ($GROUP)" || true
+          git push || true
 
-          if [ "${{ inputs.template_name }}" = "nextjs" ]; then
-            sed -i "s|\"name\": \".*\"|\"name\": \"$ARTIFACT_ID\",|g" package.json
-            mkdir -p src/lib/$ARTIFACT_ID
-            echo "// Utils para $ARTIFACT_ID" > "src/lib/$ARTIFACT_ID/index.ts"
-            echo "✅ Next.js personalizada"
-          fi
-
-          git config user.email "factory@
+      - name: Resumo
+        run: |
+          echo "✅ $(date)"
+          echo "[${{ inputs.repo_name }}](https://github.com/Gimpel-Labs/${{ inputs.repo_name }})"
