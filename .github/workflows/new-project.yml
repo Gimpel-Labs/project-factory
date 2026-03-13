@@ -5,10 +5,6 @@ on:
 
 jobs:
   test:
-    runs-on: [self-hosted, proxmox]
+    runs-on: self-hosted
     steps:
-      - name: Whoami
-        run: |
-          echo "User: $(whoami)"
-          echo "Host: $(hostname)"
-          pwd
+      - run: echo "gh-user ✅ $(id)"
