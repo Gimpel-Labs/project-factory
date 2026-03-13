@@ -1,4 +1,4 @@
-name: Generate Project from Template
+name: 🚀 Generate Project from Template
 on:
   workflow_dispatch:
     inputs:
@@ -34,7 +34,7 @@ jobs:
               template_owner: org,
               template_repo: templateRepo,
               name: '${{ github.event.inputs.repo-name }}',
-              owner: org,  // Novo repo na ORG
+              owner: org,
               private: ${{ github.event.inputs.private }},
               include_all_branches: false
             });
