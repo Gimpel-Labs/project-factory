@@ -1,0 +1,41 @@
+name: Generate Project from Template
+on:
+  workflow_dispatch:
+    inputs:
+      repo-name:
+        description: 'Project name'
+        required: true
+        default: 'example-service'
+      template-repo:
+        description: 'Template'
+        required: true
+        type: choice
+        options:
+          - spring-boot
+          - nextjs
+      private:
+        description: 'Private?'
+        type: boolean
+        default: true
+
+jobs:
+  generate:
+    runs-on: self-hosted
+    steps:
+      - name: Generate Repo from Template
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const templateRepo = `template-${{ github.event.inputs.template-repo }}`;
+            const response = await github.rest.repos.generate(
+              {
+                owner: context.repo.owner,
+                repo: templateRepo,
+                name: '${{ github.event.inputs.repo-name }}',
+                private: ${{ github.event.inputs.private }},
+                include_all_branches: false
+              }
+            );
+            console.log(`New repository: ${response.data.full_name}`);
+      - name: Log URL
+        run: echo "Repository successfully created via template!"
