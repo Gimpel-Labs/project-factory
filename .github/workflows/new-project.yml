@@ -1,42 +1,17 @@
-name: Diagnóstico Runner
+name: Force Steps
 on: [workflow_dispatch]
 jobs:
-  diag:
-    runs-on: self-hosted
+  force:
+    runs-on: [self-hosted, proxmox]
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: 1.Básico
-        run: |
-          echo "::group::Sistema"
-          whoami; hostname; pwd; date; uname -a
-          echo "::endgroup::"
-      - name: 2.Recursos
-        run: |
-          echo "::group::Recursos"
-          free -h; df -h /; ps aux | wc -l
-          echo "::endgroup::"
-      - name: 3.Network
-        run: |
-          echo "::group::Network"
-          ping -c3 8.8.8.8
-          curl -I https://github.com
-          echo "::endgroup::"
-      - name: 4.Deps
-        run: |
-          echo "::group::Dependências"
-          which java node git curl jq || echo "FALTANDO"
-          java -version 2>&1 || echo "NO JAVA"
-          node -version 2>&1 || echo "NO NODE"
-          echo "::endgroup::"
-      - name: 5.GH_TOKEN
-        run: |
-          echo "::group::Token"
-          curl -s -H "Authorization: token $GH_TOKEN" https://api.github.com/user | jq .login
-          echo "::endgroup::"
-      - name: 6.Workspace
-        run: |
-          echo "::group::Workspace"
-          ls -la _work/ || mkdir -p _work
-          df -h _work/
-          echo "::endgroup::"
-      - name: 7.Success
-        run: echo "✅ Diagnóstico completo"
+      - id: zero
+        run: echo "::notice::STEP0 $(date)"
+      - id: one
+        run: echo "::warning::STEP1 whoami = $(whoami)"
+      - id: two
+        run: echo "::error::STEP2 hostname = $(hostname)"
+      - id: three
+        run: ls -la /home/github/actions-runner/
