@@ -1,86 +1,47 @@
-name: 🚀 Criar Novo Projeto
+name: 🚀 Project Factory
 
 on:
   workflow_dispatch:
     inputs:
-      template_name:
-        description: 'Template'
+      template:
+        description: 'Template exato'
         required: true
-        type: choice
-        options:
-          - spring-boot
-          - nextjs
-      repo_name:
-        description: 'Nome do repo'
+      repo:
         required: true
-        default: 'example'
-      group_id:
-        description: 'GroupId'
-        required: true
-        default: 'com.gimpel'
-      description:
-        description: 'Descrição'
-        default: 'Project created through Factory'
+      private:
+        type: boolean
+        default: true
 
 jobs:
-  create:
-    runs-on: self-hosted
+  factory:
+    runs-on: [self-hosted, proxmox]  # ← SUAS LABELS
     steps:
-      - name: Definir template repo
-        id: vars
+      - name: Debug
         run: |
-          if [ "${{ inputs.template_name }}" = "spring-boot" ]; then
-            echo "template_repo=template-spring-boot" >> $GITHUB_OUTPUT
-          elif [ "${{ inputs.template_name }}" = "nextjs" ]; then
-            echo "template_repo=template-nextjs" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Listar templates disponíveis
-        run: |
-          echo "Templates da org:"
-          curl -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
-            https://api.github.com/orgs/Gimpel-Labs/repos?per_page=10 | jq '.[].name'
-
-      - name: Criar repositório
-        run: |
-          curl -s -w "HTTP:%{http_code}" \
-            -X POST \
-            -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
-            -H "Accept: application/vnd.github.baptiste-preview+json" \
-            "https://api.github.com/repos/Gimpel-Labs/${{ steps.vars.outputs.template_repo }}/generate" \
-            -d "{\"owner\":\"Gimpel-Labs\",\"name\":\"${{ inputs.repo_name }}\",\"description\":\"${{ inputs.description }}\",\"private\":true}" > response.json
-
-          HTTP_CODE=$(grep -o 'HTTP:[0-9]*' response.json | cut -d: -f2)
+          echo "Runner: $(uname -a)"
+          echo "User: $(whoami)"
+          echo "Disk: $(df -h | head -3)"
           
-          if [ "$HTTP_CODE" = "201" ]; then
-            echo "✅ Repo criado: ${{ inputs.repo_name }}"
-          else
-            echo "❌ Erro $HTTP_CODE"
-            cat response.json
+      - name: Listar templates
+        run: |
+          curl -s -H "Authorization: token $GH_TOKEN" \
+            https://api.github.com/orgs/Gimpel-Labs/repos?per_page=20 \
+            | grep -E "${{ inputs.template }}" \
+            | grep name || echo "Template não encontrado"
+
+      - name: Criar projeto
+        run: |
+          RESPONSE=$(curl -s -w "\nCODE:%{http_code}" \
+            -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.baptiste-preview+json" \
+            "https://api.github.com/repos/Gimpel-Labs/${{ inputs.template }}/generate" \
+            -d "{\"owner\":\"Gimpel-Labs\",\"name\":\"${{ inputs.repo }}\",\"description\":\"Factory\",\"private\":${{ inputs.private }}}")
+          
+          echo "$RESPONSE"
+          if ! echo "$RESPONSE" | grep -q "CODE:201"; then
             exit 1
           fi
 
-      - name: Personalizar
-        run: |
-          sleep 5
-          git clone "https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/Gimpel-Labs/${{ inputs.repo_name }}.git" /tmp/repo
-          cd /tmp/repo
-          
-          GROUP="${{ inputs.group_id }}"
-          NAME="${{ inputs.artifact_id || inputs.repo_name }}"
-          
-          if [ "${{ inputs.template_name }}" = "springboot" ]; then
-            sed -i "s|<groupId>.*</groupId>|<groupId>$GROUP</groupId>|g" pom.xml || true
-            sed -i "s|<artifactId>.*</artifactId>|<artifactId>$NAME</artifactId>|g" pom.xml || true
-          fi
-          
-          git config user.email gustavo.gimpel@gmail.com
-          git config user.name Factory
-          git add . || true
-          git commit -m "factory: $NAME ($GROUP)" || true
-          git push || true
-
-      - name: Resumo
-        run: |
-          echo "✅ $(date)"
-          echo "[${{ inputs.repo_name }}](https://github.com/Gimpel-Labs/${{ inputs.repo_name }})"
+      - name: Sucesso
+        run: echo "✅ ${{ inputs.repo }} criado!"
