@@ -27,17 +27,73 @@ jobs:
         with:
           github-token: ${{ secrets.GH_TOKEN }}
           script: |
+            const repoName = '${{ github.event.inputs.repo-name }}';
             const templateSuffix = '${{ github.event.inputs.template-repo }}';
             const templateRepo = `template-${templateSuffix}`;
             const org = 'Gimpel-Labs';
+
+            // Check if repo already exists in the org
+            try {
+              await github.request('GET /repos/{owner}/{repo}', {
+                owner: org,
+                repo: repoName
+              });
+              core.setFailed(`Repository "${org}/${repoName}" already exists in the organization.`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+              // 404 means repo doesn't exist, proceed
+            }
+
+            // Create repo from template
             const response = await github.request('POST /repos/{template_owner}/{template_repo}/generate', {
               template_owner: org,
               template_repo: templateRepo,
-              name: '${{ github.event.inputs.repo-name }}',
+              name: repoName,
               owner: org,
               private: ${{ github.event.inputs.private }},
               include_all_branches: false
             });
             console.log(`New org repo: ${response.data.full_name}`);
+
+            // If spring-boot, update pom.xml with repo-name
+            if (templateSuffix === 'spring-boot') {
+              await new Promise(resolve => setTimeout(resolve, 5000));
+
+              const pomFile = await github.request('GET /repos/{owner}/{repo}/contents/{path}', {
+                owner: org,
+                repo: repoName,
+                path: 'pom.xml'
+              });
+
+              const content = Buffer.from(pomFile.data.content, 'base64').toString('utf-8');
+
+              // Replace project-level artifactId (the one after </parent>)
+              const parentEndIndex = content.indexOf('</parent>');
+              let updatedContent;
+              if (parentEndIndex !== -1) {
+                const before = content.substring(0, parentEndIndex + '</parent>'.length);
+                const after = content.substring(parentEndIndex + '</parent>'.length);
+                updatedContent = before + after.replace(/<artifactId>[^<]*<\/artifactId>/, `<artifactId>${repoName}</artifactId>`);
+              } else {
+                updatedContent = content.replace(/<artifactId>[^<]*<\/artifactId>/, `<artifactId>${repoName}</artifactId>`);
+              }
+
+              // Replace <name>
+              updatedContent = updatedContent.replace(/<name>[^<]*<\/name>/, `<name>${repoName}</name>`);
+
+              await github.request('PUT /repos/{owner}/{repo}/contents/{path}', {
+                owner: org,
+                repo: repoName,
+                path: 'pom.xml',
+                message: `chore: update pom.xml with project name ${repoName}`,
+                content: Buffer.from(updatedContent).toString('base64'),
+                sha: pomFile.data.sha
+              });
+
+              console.log(`pom.xml updated with artifactId and name: ${repoName}`);
+            }
       - name: Log URL
         run: echo "Repository successfully created via template!"
