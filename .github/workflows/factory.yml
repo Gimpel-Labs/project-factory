@@ -68,7 +68,7 @@ jobs:
                   });
                   break;
                 } catch (error) {
-                  if (error.status !== 404 || attempt === maxAttempts) {
+                  if (![404, 409].includes(error.status) || attempt === maxAttempts) {
                     throw error;
                   }
                   await new Promise(resolve => setTimeout(resolve, retryDelayMs));
