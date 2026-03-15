@@ -56,13 +56,24 @@ jobs:
             console.log(`New org repo: ${response.data.full_name}`);
 
             if (templateSuffix === 'spring-boot') {
-              await new Promise(resolve => setTimeout(resolve, 5000));
-
-              const pomFile = await github.request('GET /repos/{owner}/{repo}/contents/{path}', {
-                owner: org,
-                repo: repoName,
-                path: 'pom.xml'
-              });
+              let pomFile;
+              const maxAttempts = 10;
+              const retryDelayMs = 3000;
+              for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                  pomFile = await github.request('GET /repos/{owner}/{repo}/contents/{path}', {
+                    owner: org,
+                    repo: repoName,
+                    path: 'pom.xml'
+                  });
+                  break;
+                } catch (error) {
+                  if (error.status !== 404 || attempt === maxAttempts) {
+                    throw error;
+                  }
+                  await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+                }
+              }
 
               const content = Buffer.from(pomFile.data.content, 'base64').toString('utf-8');
 
