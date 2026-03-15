@@ -32,7 +32,6 @@ jobs:
             const templateRepo = `template-${templateSuffix}`;
             const org = 'Gimpel-Labs';
 
-            // Check if repo already exists in the org
             try {
               await github.request('GET /repos/{owner}/{repo}', {
                 owner: org,
@@ -44,10 +43,8 @@ jobs:
               if (error.status !== 404) {
                 throw error;
               }
-              // 404 means repo doesn't exist, proceed
             }
 
-            // Create repo from template
             const response = await github.request('POST /repos/{template_owner}/{template_repo}/generate', {
               template_owner: org,
               template_repo: templateRepo,
@@ -58,7 +55,6 @@ jobs:
             });
             console.log(`New org repo: ${response.data.full_name}`);
 
-            // If spring-boot, update pom.xml with repo-name
             if (templateSuffix === 'spring-boot') {
               await new Promise(resolve => setTimeout(resolve, 5000));
 
@@ -70,7 +66,6 @@ jobs:
 
               const content = Buffer.from(pomFile.data.content, 'base64').toString('utf-8');
 
-              // Replace project-level artifactId (the one after </parent>)
               const parentEndIndex = content.indexOf('</parent>');
               let updatedContent;
               if (parentEndIndex !== -1) {
@@ -81,7 +76,6 @@ jobs:
                 updatedContent = content.replace(/<artifactId>[^<]*<\/artifactId>/, `<artifactId>${repoName}</artifactId>`);
               }
 
-              // Replace <name>
               updatedContent = updatedContent.replace(/<name>[^<]*<\/name>/, `<name>${repoName}</name>`);
 
               await github.request('PUT /repos/{owner}/{repo}/contents/{path}', {
