@@ -113,14 +113,10 @@ jobs:
               const maxAttempts = 10;
               const retryDelayMs = 3000;
 
-              const fetchFile = async (path) => {
+              const withRetry = async (fn) => {
                 for (let attempt = 1; attempt <= maxAttempts; attempt++) {
                   try {
-                    return await github.request('GET /repos/{owner}/{repo}/contents/{path}', {
-                      owner: org,
-                      repo: repoName,
-                      path
-                    });
+                    return await fn();
                   } catch (error) {
                     if (![404, 409].includes(error.status) || attempt === maxAttempts) {
                       throw error;
@@ -129,6 +125,14 @@ jobs:
                   }
                 }
               };
+
+              const fetchFile = (path) => withRetry(() =>
+                github.request('GET /repos/{owner}/{repo}/contents/{path}', {
+                  owner: org,
+                  repo: repoName,
+                  path
+                })
+              );
 
               const pkgFile = await fetchFile('package.json');
               const pkg = JSON.parse(Buffer.from(pkgFile.data.content, 'base64').toString('utf-8'));
@@ -141,13 +145,21 @@ jobs:
                 lock.packages[''].name = repoName;
               }
 
-              const defaultBranch = response.data.default_branch;
+              const repoInfo = await withRetry(() =>
+                github.request('GET /repos/{owner}/{repo}', {
+                  owner: org,
+                  repo: repoName
+                })
+              );
+              const defaultBranch = repoInfo.data.default_branch;
 
-              const refData = await github.request('GET /repos/{owner}/{repo}/git/ref/{ref}', {
-                owner: org,
-                repo: repoName,
-                ref: `heads/${defaultBranch}`
-              });
+              const refData = await withRetry(() =>
+                github.request('GET /repos/{owner}/{repo}/git/ref/{ref}', {
+                  owner: org,
+                  repo: repoName,
+                  ref: `heads/${defaultBranch}`
+                })
+              );
               const headSha = refData.data.object.sha;
 
               const commitData = await github.request('GET /repos/{owner}/{repo}/git/commits/{commit_sha}', {
